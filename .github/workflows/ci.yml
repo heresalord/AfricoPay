@@ -5,10 +5,12 @@ on:
     branches: [ main, develop, 'feature/**', 'release/**', 'hotfix/**' ]
     paths:
       - 'africopay-android/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'africopay-android/**'
+      - '.github/workflows/**'
 
 env:
   JAVA_VERSION: '17'
