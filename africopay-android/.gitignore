@@ -37,7 +37,6 @@ schemas/
 
 # Gradle cache
 .gradle/
-gradle-wrapper.jar
 
 # ProGuard mappings
 mapping/
