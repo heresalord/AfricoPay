@@ -113,6 +113,9 @@ dependencies {
     // Timber logging
     implementation(libs.timber)
 
+    // QR Code Generation
+    implementation(libs.zxing.core)
+
     // Tests
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

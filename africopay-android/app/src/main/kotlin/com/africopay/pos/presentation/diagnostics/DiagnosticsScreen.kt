@@ -10,12 +10,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import com.africopay.pos.BuildConfig
+import com.africopay.pos.core.util.HardwareCapabilitiesDetector
+import com.africopay.pos.domain.model.HardwareCapabilities
 import com.africopay.pos.presentation.theme.*
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
 data class DiagnosticItem(
     val name: String,
@@ -25,28 +30,61 @@ data class DiagnosticItem(
     val details: String? = null
 )
 
+@HiltViewModel
+class DiagnosticsViewModel @Inject constructor(
+    private val hardwareDetector: HardwareCapabilitiesDetector
+) : ViewModel() {
+
+    fun runDiagnostics(): Pair<HardwareCapabilities, List<DiagnosticItem>> {
+        val hw = hardwareDetector.detect()
+        val sim = BuildConfig.SIMULATION_MODE
+
+        val items = listOf(
+            DiagnosticItem(
+                "NFC", hw.hasNfc, Icons.Default.Contactless,
+                details = when {
+                    !hw.hasNfc -> "Non présent sur cet appareil"
+                    hw.nfcEnabled -> "Activé"
+                    else -> "Désactivé dans les paramètres"
+                }
+            ),
+            DiagnosticItem(
+                "Lecteur EMV", hw.hasEmv || sim, Icons.Default.CreditCard,
+                details = if (hw.hasEmv) null else "Non intégré — mode simulation"
+            ),
+            DiagnosticItem(
+                "Bande Magnétique", hw.hasMagStripe || sim, Icons.Default.SwipeRight,
+                details = if (hw.hasMagStripe) null else "Non intégré — mode simulation"
+            ),
+            DiagnosticItem(
+                "Imprimante Thermique", hw.hasPrinter || sim, Icons.Default.Print,
+                details = if (hw.hasPrinter) "Papier OK" else "Non intégré — mode simulation"
+            ),
+            DiagnosticItem("Caméra", hw.hasCamera, Icons.Default.PhotoCamera),
+            DiagnosticItem("Scanner Code-barres", hw.hasScanner, Icons.Default.QrCodeScanner,
+                details = if (!hw.hasScanner) "Non disponible" else null),
+            DiagnosticItem("GPS", hw.hasGps, Icons.Default.LocationOn),
+            DiagnosticItem("Bluetooth", hw.hasBluetooth, Icons.Default.Bluetooth),
+            DiagnosticItem("Wi-Fi", hw.hasWifi, Icons.Default.Wifi,
+                details = if (hw.networkType == "WIFI") "Connecté" else null),
+            DiagnosticItem("USB", true, Icons.Default.Usb),
+        )
+        return hw to items
+    }
+}
+
 /**
- * Hardware diagnostics screen — shows availability and version of all POS peripherals.
+ * Hardware diagnostics screen — shows real availability read from
+ * [HardwareCapabilitiesDetector], not hardcoded placeholders.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiagnosticsScreen(onBack: () -> Unit) {
-
-    // Simulated diagnostic items — in production, populated from HardwareCapabilities
-    val components = remember {
-        listOf(
-            DiagnosticItem("NFC", true, Icons.Default.Contactless, details = "Activé"),
-            DiagnosticItem("Lecteur EMV", true, Icons.Default.CreditCard, version = "2.1.0"),
-            DiagnosticItem("Bande Magnétique", true, Icons.Default.SwipeRight, version = "1.0.0"),
-            DiagnosticItem("Imprimante Thermique", true, Icons.Default.Print, version = "3.2.1", details = "Papier OK"),
-            DiagnosticItem("Caméra", true, Icons.Default.PhotoCamera),
-            DiagnosticItem("Scanner Code-barres", false, Icons.Default.QrCodeScanner, details = "Non disponible"),
-            DiagnosticItem("GPS", true, Icons.Default.LocationOn),
-            DiagnosticItem("Bluetooth", true, Icons.Default.Bluetooth, details = "Désactivé"),
-            DiagnosticItem("Wi-Fi", true, Icons.Default.Wifi, details = "Connecté"),
-            DiagnosticItem("USB", true, Icons.Default.Usb),
-        )
-    }
+fun DiagnosticsScreen(
+    onBack: () -> Unit,
+    viewModel: DiagnosticsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+) {
+    var result by remember { mutableStateOf(viewModel.runDiagnostics()) }
+    val (hw, components) = result
 
     Scaffold(
         containerColor = AfricoDark,
@@ -59,7 +97,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* Re-run diagnostics */ }) {
+                    IconButton(onClick = { result = viewModel.runDiagnostics() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = AfricoGreen)
                     }
                 },
@@ -83,9 +121,12 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = AfricoGreen, modifier = Modifier.size(36.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("AfricoPay Terminal", color = AfricoOnDark, fontWeight = FontWeight.Bold)
-                        Text("Fabricant: SIMULATION · Android 13", color = AfricoOnDarkMuted, fontSize = 12.sp)
-                        Text("Mode: Simulation v0.1.0", color = AfricoGold, fontSize = 12.sp)
+                        Text("${hw.manufacturer} ${hw.model}".trim(), color = AfricoOnDark, fontWeight = FontWeight.Bold)
+                        Text("Android API ${hw.androidVersion} · Batterie ${hw.batteryLevel}%", color = AfricoOnDarkMuted, fontSize = 12.sp)
+                        Text(
+                            if (BuildConfig.SIMULATION_MODE) "Mode: Simulation ${BuildConfig.VERSION_NAME}" else "Mode: Production ${BuildConfig.VERSION_NAME}",
+                            color = AfricoGold, fontSize = 12.sp
+                        )
                     }
                 }
             }

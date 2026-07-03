@@ -1,5 +1,6 @@
 package com.africopay.pos.hal.mock
 
+import android.app.Activity
 import com.africopay.pos.domain.model.*
 import com.africopay.pos.hal.interfaces.NfcService
 import kotlinx.coroutines.delay
@@ -9,8 +10,9 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * Mock NFC service for simulation mode (v0.1.0).
- * Simulates card detection and payment processing without real hardware.
+ * Fully-simulated NFC service (no real hardware event, fixed delay then a fake tap).
+ * Used only for unit tests / non-Activity contexts. The app itself uses
+ * [com.africopay.pos.hal.android.AndroidNfcService] for real tap detection.
  */
 class MockNfcService @Inject constructor(
     private val simulationConfig: SimulationConfig
@@ -19,7 +21,7 @@ class MockNfcService @Inject constructor(
     override fun isAvailable(): Boolean = true
     override fun isEnabled(): Boolean = true
 
-    override fun startListening(): Flow<NfcEvent> = flow {
+    override fun startListening(activity: Activity): Flow<NfcEvent> = flow {
         emit(NfcEvent.Listening)
         delay(simulationConfig.processingDelayMs)
         emit(NfcEvent.CardDetected(NfcCardData()))

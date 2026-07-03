@@ -1,10 +1,8 @@
 package com.africopay.pos.presentation.payment
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,43 +10,112 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.africopay.pos.domain.model.MobileMoneyProvider
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
+import androidx.lifecycle.ViewModel
+import com.africopay.pos.BuildConfig
+import com.africopay.pos.core.util.HardwareCapabilitiesDetector
+import com.africopay.pos.domain.model.HardwareCapabilities
 import com.africopay.pos.domain.model.PaymentMethod
 import com.africopay.pos.presentation.home.formatXof
 import com.africopay.pos.presentation.theme.*
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
 data class PaymentMethodUi(
     val method: PaymentMethod,
     val icon: ImageVector,
     val description: String,
-    val isAvailable: Boolean = true
+    val isAvailable: Boolean,
+    val unavailableReason: String? = null
 )
 
+@HiltViewModel
+class PaymentMethodsViewModel @Inject constructor(
+    private val hardwareDetector: HardwareCapabilitiesDetector
+) : ViewModel() {
+
+    /** Builds the method list from real device capabilities every time the screen is shown. */
+    fun buildAvailableMethods(): List<PaymentMethodUi> {
+        val hw: HardwareCapabilities = hardwareDetector.detect()
+        val simulationMode = BuildConfig.SIMULATION_MODE
+
+        return listOfNotNull(
+            // NFC: hidden entirely if the device has no NFC radio at all.
+            if (hw.hasNfc) {
+                PaymentMethodUi(
+                    method = PaymentMethod.NFC,
+                    icon = Icons.Default.Contactless,
+                    description = if (hw.nfcEnabled) "Approchez la carte" else "NFC désactivé — activez-le dans les paramètres",
+                    isAvailable = hw.nfcEnabled,
+                    unavailableReason = if (!hw.nfcEnabled) "NFC désactivé" else null
+                )
+            } else null,
+
+            // EMV / Mag stripe require a certified Smart POS reader (ZCS/Sunmi/PAX/...).
+            // None is integrated yet, so these only appear in simulation mode.
+            if (hw.hasEmv || simulationMode) {
+                PaymentMethodUi(
+                    method = PaymentMethod.EMV,
+                    icon = Icons.Default.CreditCard,
+                    description = if (hw.hasEmv) "Insérez la carte à puce" else "Insérez la carte à puce (mode simulation)",
+                    isAvailable = true
+                )
+            } else null,
+
+            if (hw.hasMagStripe || simulationMode) {
+                PaymentMethodUi(
+                    method = PaymentMethod.MAG_STRIPE,
+                    icon = Icons.Default.SwipeRight,
+                    description = if (hw.hasMagStripe) "Glissez la bande magnétique" else "Glissez la bande magnétique (mode simulation)",
+                    isAvailable = true
+                )
+            } else null,
+
+            // QR generation has no hardware dependency — always available.
+            PaymentMethodUi(
+                method = PaymentMethod.QR_CODE,
+                icon = Icons.Default.QrCode,
+                description = "Scanner le QR Code",
+                isAvailable = true
+            ),
+
+            // Mobile Money / Cash have no hardware dependency — always available.
+            PaymentMethodUi(
+                method = PaymentMethod.MOBILE_MONEY,
+                icon = Icons.Default.PhoneAndroid,
+                description = "MTN · Moov · Orange · Wave",
+                isAvailable = true
+            ),
+            PaymentMethodUi(
+                method = PaymentMethod.CASH,
+                icon = Icons.Default.Money,
+                description = "Paiement en espèces",
+                isAvailable = true
+            )
+        )
+    }
+}
+
 /**
- * Payment methods selection screen.
- * Dynamically built — future: filter by HardwareCapabilities.
+ * Payment methods selection screen. The list reflects real device hardware:
+ * NFC only appears if the device has an NFC radio (and shows a hint if it's disabled).
+ * EMV / mag-stripe only appear when real reader hardware is detected, or in simulation mode.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentMethodsScreen(
     amountCents: Long,
     onMethodSelected: (methodKey: String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: PaymentMethodsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
-    // In v0.1.0: all methods are available (simulated)
-    val availableMethods = listOf(
-        PaymentMethodUi(PaymentMethod.NFC, Icons.Default.Contactless, "Approchez la carte"),
-        PaymentMethodUi(PaymentMethod.EMV, Icons.Default.CreditCard, "Insérez la carte à puce"),
-        PaymentMethodUi(PaymentMethod.MAG_STRIPE, Icons.Default.SwipeRight, "Glissez la bande magnétique"),
-        PaymentMethodUi(PaymentMethod.QR_CODE, Icons.Default.QrCode, "Scanner le QR Code"),
-        PaymentMethodUi(PaymentMethod.MOBILE_MONEY, Icons.Default.PhoneAndroid, "MTN · Moov · Orange · Wave"),
-        PaymentMethodUi(PaymentMethod.CASH, Icons.Default.Money, "Paiement en espèces")
-    )
+    val availableMethods = remember { viewModel.buildAvailableMethods() }
 
     Scaffold(
         containerColor = AfricoDark,
@@ -76,6 +143,16 @@ fun PaymentMethodsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (availableMethods.none { it.method == PaymentMethod.NFC }) {
+                item {
+                    Text(
+                        "NFC non disponible sur cet appareil",
+                        color = AfricoOnDarkMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+            }
             items(availableMethods) { item ->
                 PaymentMethodCard(
                     item = item,
@@ -89,6 +166,7 @@ fun PaymentMethodsScreen(
 
 @Composable
 private fun PaymentMethodCard(item: PaymentMethodUi, onClick: () -> Unit) {
+    val contentAlpha = if (item.isAvailable) 1f else 0.5f
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -99,10 +177,9 @@ private fun PaymentMethodCard(item: PaymentMethodUi, onClick: () -> Unit) {
         tonalElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(20.dp).alpha(contentAlpha),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon Badge
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = AfricoGreen.copy(alpha = 0.15f),

@@ -1,5 +1,6 @@
 package com.africopay.pos.hal.interfaces
 
+import android.app.Activity
 import com.africopay.pos.domain.model.NfcCardData
 import com.africopay.pos.domain.model.NfcEvent
 import com.africopay.pos.domain.model.PaymentResult
@@ -17,16 +18,17 @@ interface NfcService {
     fun isEnabled(): Boolean
 
     /**
-     * Starts listening for NFC card/tag events.
-     * Emits [NfcEvent] when a card is detected or an error occurs.
+     * Starts listening for NFC card/tag events using reader mode on [activity].
+     * Emits [NfcEvent] when a card is detected or an error occurs. Reader mode is
+     * disabled automatically when the collecting coroutine is cancelled.
      */
-    fun startListening(): Flow<NfcEvent>
+    fun startListening(activity: Activity): Flow<NfcEvent>
 
     /** Stops listening for NFC events. */
     fun stopListening()
 
     /**
-     * Processes an NFC card for payment.
+     * Processes a detected NFC card for payment.
      * @param cardData Data captured from the NFC card.
      * @return [PaymentResult] with approval status and details.
      */

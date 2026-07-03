@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.room.Room
 import com.africopay.pos.data.local.db.AfricoPayDatabase
 import com.africopay.pos.domain.model.SimulationConfig
+import com.africopay.pos.hal.android.AndroidNfcService
 import com.africopay.pos.hal.interfaces.*
 import com.africopay.pos.hal.mock.*
 import dagger.Module
@@ -55,13 +56,14 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideNfcService(simulationConfig: SimulationConfig): NfcService {
+    fun provideNfcService(
+        @ApplicationContext context: Context,
+        simulationConfig: SimulationConfig
+    ): NfcService {
         Timber.tag("HAL").d("Manufacturer: ${Build.MANUFACTURER}")
-        return when (Build.MANUFACTURER.lowercase()) {
-            // Future: "sunmi" -> SunmiNfcService(context)
-            // Future: "pax"   -> PaxNfcService(context)
-            else -> MockNfcService(simulationConfig)
-        }
+        // NFC reader mode is a standard Android API available on any NFC-capable phone,
+        // so real tap detection doesn't need manufacturer-specific SDKs like EMV/MSR do.
+        return AndroidNfcService(context, simulationConfig)
     }
 
     @Provides
