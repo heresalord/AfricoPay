@@ -1,0 +1,43 @@
+# AfricoPay Android .gitignore
+
+# Built artifacts
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# APKs & AABs — never commit binaries
+*.apk
+*.aab
+*.aar
+
+# Keystore files — NEVER commit signing keys
+*.jks
+*.keystore
+*.p12
+release.properties
+signing.properties
+
+# Generated files
+app/build/
+.kotlin/
+schemas/
+
+# Android Studio
+*.iml
+.idea/
+*.xml.meta
+*.idea
+
+# Gradle cache
+.gradle/
+gradle-wrapper.jar
+
+# ProGuard mappings
+mapping/

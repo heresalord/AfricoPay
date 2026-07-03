@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AfricoPay</string>
+    <string name="app_description">Terminal de paiement marchand</string>
+    <string name="btn_continue">Continuer</string>
+    <string name="btn_cancel">Annuler</string>
+    <string name="btn_retry">Réessayer</string>
+    <string name="btn_print">Imprimer le Reçu</string>
+    <string name="btn_home">Accueil</string>
+    <string name="btn_history">Historique</string>
+    <string name="label_amount">Montant à encaisser</string>
+    <string name="label_currency">XOF</string>
+    <string name="label_approved">APPROUVÉ</string>
+    <string name="label_declined">REFUSÉ</string>
+    <string name="label_simulation_mode">MODE SIMULATION</string>
+    <string name="label_test_transaction">★ TRANSACTION TEST ★</string>
+</resources>

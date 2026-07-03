@@ -1,0 +1,28 @@
+# Root .gitignore for AfricoPay Monorepo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Gradle files (handled by subfolder .gitignore, but safe to include)
+.gradle/
+build/
+local.properties
+
+# Secrets and keys
+*.jks
+*.keystore
+*.p12
+*.pem
+.env
+.env.*
+!.env.example
