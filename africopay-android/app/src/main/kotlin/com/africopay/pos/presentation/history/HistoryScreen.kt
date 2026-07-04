@@ -13,40 +13,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.africopay.pos.data.local.db.dao.TransactionDao
+import com.africopay.pos.data.local.db.entity.TransactionEntity
 import com.africopay.pos.domain.model.PaymentMethod
-import com.africopay.pos.domain.model.TransactionStatus
 import com.africopay.pos.presentation.home.formatXof
 import com.africopay.pos.presentation.theme.*
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import javax.inject.Inject
 
-// Placeholder data class for UI display until ViewModel + Room is wired
-data class TransactionUiItem(
-    val id: String,
-    val amount: Long,
-    val method: PaymentMethod,
-    val status: TransactionStatus,
-    val date: Date,
-    val receiptNumber: String
-)
+@HiltViewModel
+class HistoryViewModel @Inject constructor(
+    transactionDao: TransactionDao
+) : ViewModel() {
+    val transactions: StateFlow<List<TransactionEntity>> = transactionDao.getAllTransactions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+}
 
 /**
  * Transaction history screen. Lists all locally stored transactions with filtering.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
+fun HistoryScreen(
+    onBack: () -> Unit,
+    viewModel: HistoryViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+) {
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE) }
-
-    // Placeholder transactions (replaced by Room + ViewModel in production)
-    val transactions = remember {
-        listOf(
-            TransactionUiItem("1", 25000L, PaymentMethod.NFC, TransactionStatus.APPROVED, Date(), "REC-001"),
-            TransactionUiItem("2", 7500L, PaymentMethod.EMV, TransactionStatus.DECLINED, Date(System.currentTimeMillis() - 300000), "REC-002"),
-            TransactionUiItem("3", 50000L, PaymentMethod.MOBILE_MONEY, TransactionStatus.APPROVED, Date(System.currentTimeMillis() - 600000), "REC-003"),
-            TransactionUiItem("4", 12000L, PaymentMethod.CASH, TransactionStatus.APPROVED, Date(System.currentTimeMillis() - 900000), "REC-004"),
-        )
-    }
+    val transactions by viewModel.transactions.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     val filtered = transactions.filter {
@@ -80,7 +81,6 @@ fun HistoryScreen(onBack: () -> Unit) {
                 .padding(padding)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Search bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -105,12 +105,15 @@ fun HistoryScreen(onBack: () -> Unit) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null,
                             tint = AfricoOnDarkMuted, modifier = Modifier.size(64.dp))
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Aucune transaction", color = AfricoOnDarkMuted, fontSize = 16.sp)
+                        Text(
+                            if (transactions.isEmpty()) "Aucune transaction" else "Aucun résultat",
+                            color = AfricoOnDarkMuted, fontSize = 16.sp
+                        )
                     }
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filtered) { txn ->
+                    items(filtered, key = { it.id }) { txn ->
                         TransactionCard(txn = txn, dateFormat = dateFormat)
                     }
                 }
@@ -120,12 +123,14 @@ fun HistoryScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun TransactionCard(txn: TransactionUiItem, dateFormat: SimpleDateFormat) {
+private fun TransactionCard(txn: TransactionEntity, dateFormat: SimpleDateFormat) {
+    val isApproved = txn.status == "APPROVED"
     val statusColor = when (txn.status) {
-        TransactionStatus.APPROVED -> AfricoSuccess
-        TransactionStatus.CANCELLED -> AfricoOnDarkMuted
+        "APPROVED" -> AfricoSuccess
+        "CANCELLED" -> AfricoOnDarkMuted
         else -> AfricoError
     }
+    val method = try { PaymentMethod.valueOf(txn.paymentMethod).displayName } catch (e: Exception) { txn.paymentMethod }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -143,7 +148,7 @@ private fun TransactionCard(txn: TransactionUiItem, dateFormat: SimpleDateFormat
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = if (txn.status == TransactionStatus.APPROVED) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                        imageVector = if (isApproved) Icons.Default.CheckCircle else Icons.Default.Cancel,
                         contentDescription = null,
                         tint = statusColor,
                         modifier = Modifier.size(24.dp)
@@ -152,18 +157,19 @@ private fun TransactionCard(txn: TransactionUiItem, dateFormat: SimpleDateFormat
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(txn.method.displayName, color = AfricoOnDark, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(dateFormat.format(txn.date), color = AfricoOnDarkMuted, fontSize = 12.sp)
+                Text(method, color = AfricoOnDark, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(dateFormat.format(Date(txn.timestamp)), color = AfricoOnDarkMuted, fontSize = 12.sp)
                 Text(txn.receiptNumber, color = AfricoOnDarkMuted, fontSize = 11.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(formatXof(txn.amount), color = AfricoOnDark, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text(
                     text = when (txn.status) {
-                        TransactionStatus.APPROVED -> "Approuvé"
-                        TransactionStatus.DECLINED -> "Refusé"
-                        TransactionStatus.CANCELLED -> "Annulé"
-                        else -> txn.status.name
+                        "APPROVED" -> "Approuvé"
+                        "DECLINED" -> "Refusé"
+                        "CANCELLED" -> "Annulé"
+                        "TIMEOUT" -> "Délai dépassé"
+                        else -> txn.status
                     },
                     color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.Medium
                 )

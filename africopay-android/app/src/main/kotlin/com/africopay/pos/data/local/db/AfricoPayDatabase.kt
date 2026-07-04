@@ -12,7 +12,7 @@ import com.africopay.pos.data.local.db.entity.*
         MerchantProfileEntity::class,
         HardwareDiagnosticEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AfricoPayDatabase : RoomDatabase() {

@@ -26,6 +26,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.africopay.pos.core.util.QrCodeGenerator
 import com.africopay.pos.core.util.findActivity
+import com.africopay.pos.data.local.db.dao.MerchantProfileDao
+import com.africopay.pos.data.local.db.dao.ReceiptDao
+import com.africopay.pos.data.local.db.dao.TransactionDao
+import com.africopay.pos.data.local.db.entity.ReceiptEntity
+import com.africopay.pos.data.local.db.entity.TransactionEntity
 import com.africopay.pos.domain.model.*
 import com.africopay.pos.hal.interfaces.NfcService
 import com.africopay.pos.presentation.home.formatXof
@@ -55,7 +60,10 @@ sealed class ProcessingState {
 @HiltViewModel
 class ProcessingViewModel @Inject constructor(
     private val simulationConfig: SimulationConfig,
-    private val nfcService: NfcService
+    private val nfcService: NfcService,
+    private val transactionDao: TransactionDao,
+    private val receiptDao: ReceiptDao,
+    private val merchantProfileDao: MerchantProfileDao
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ProcessingState>(ProcessingState.Waiting)
@@ -79,18 +87,20 @@ class ProcessingViewModel @Inject constructor(
             }
 
             when (event) {
-                null -> _state.value = ProcessingState.Result(
-                    PaymentResult(
+                null -> {
+                    val result = PaymentResult(
                         status = TransactionStatus.TIMEOUT,
                         transactionId = UUID.randomUUID().toString(),
                         receiptNumber = "SIM-NFC-${System.currentTimeMillis()}",
                         declineReason = "Aucune carte présentée après 60 secondes"
-                    ),
-                    PaymentMethod.NFC
-                )
+                    )
+                    persist(amountCents, PaymentMethod.NFC, result)
+                    _state.value = ProcessingState.Result(result, PaymentMethod.NFC)
+                }
                 is NfcEvent.CardDetected -> {
                     _state.value = ProcessingState.Processing
                     val result = nfcService.processCard(event.cardData)
+                    persist(amountCents, PaymentMethod.NFC, result)
                     _state.value = ProcessingState.Result(result, PaymentMethod.NFC)
                 }
                 is NfcEvent.Error -> _state.value = ProcessingState.NfcError(event.message)
@@ -102,10 +112,11 @@ class ProcessingViewModel @Inject constructor(
     }
 
     private suspend fun processQr(amountCents: Long) {
+        val profile = merchantProfileDao.getMerchantProfileOnce()
         val reference = "QR-${System.currentTimeMillis()}"
         val payload = QrCodeGenerator.buildPayload(
-            merchantId = "MERCHANT-DEV",
-            terminalId = "TERMINAL-DEV",
+            merchantId = profile?.merchantId?.ifBlank { "MERCHANT-DEV" } ?: "MERCHANT-DEV",
+            terminalId = profile?.terminalId?.ifBlank { "TERMINAL-DEV" } ?: "TERMINAL-DEV",
             amountCents = amountCents,
             reference = reference
         )
@@ -116,15 +127,14 @@ class ProcessingViewModel @Inject constructor(
         // simulated after the QR has been genuinely generated and displayed.
         delay(simulationConfig.processingDelayMs)
         val status = simulationConfig.nextResult(amountCents)
-        _state.value = ProcessingState.Result(
-            PaymentResult(
-                status = status,
-                transactionId = UUID.randomUUID().toString(),
-                receiptNumber = "SIM-QR-${System.currentTimeMillis()}",
-                authCode = if (status == TransactionStatus.APPROVED) "AUTH${(100000..999999).random()}" else null
-            ),
-            PaymentMethod.QR_CODE
+        val result = PaymentResult(
+            status = status,
+            transactionId = UUID.randomUUID().toString(),
+            receiptNumber = "SIM-QR-${System.currentTimeMillis()}",
+            authCode = if (status == TransactionStatus.APPROVED) "AUTH${(100000..999999).random()}" else null
         )
+        persist(amountCents, PaymentMethod.QR_CODE, result)
+        _state.value = ProcessingState.Result(result, PaymentMethod.QR_CODE)
     }
 
     private suspend fun processGeneric(amountCents: Long, method: PaymentMethod) {
@@ -137,7 +147,56 @@ class ProcessingViewModel @Inject constructor(
             receiptNumber = "SIM-${method.name}-${System.currentTimeMillis()}",
             authCode = if (status == TransactionStatus.APPROVED) "AUTH${(100000..999999).random()}" else null
         )
+        persist(amountCents, method, result)
         _state.value = ProcessingState.Result(result, method)
+    }
+
+    /** Writes the transaction + a receipt snapshot to Room so History/Dashboard/Receipt are real. */
+    private suspend fun persist(amountCents: Long, method: PaymentMethod, result: PaymentResult) {
+        val profile = merchantProfileDao.getMerchantProfileOnce()
+        val now = System.currentTimeMillis()
+        val merchantId = profile?.merchantId?.ifBlank { "MERCHANT-DEV" } ?: "MERCHANT-DEV"
+        val terminalId = profile?.terminalId?.ifBlank { "TERMINAL-DEV" } ?: "TERMINAL-DEV"
+        val currency = profile?.currency?.ifBlank { "XOF" } ?: "XOF"
+
+        transactionDao.insertTransaction(
+            TransactionEntity(
+                id = result.transactionId,
+                amount = amountCents,
+                currency = currency,
+                paymentMethod = method.name,
+                status = result.status.name,
+                declineReason = result.declineReason,
+                timestamp = now,
+                receiptNumber = result.receiptNumber,
+                terminalId = terminalId,
+                merchantId = merchantId,
+                isSimulated = true,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+
+        receiptDao.insertReceipt(
+            ReceiptEntity(
+                id = UUID.randomUUID().toString(),
+                transactionId = result.transactionId,
+                receiptNumber = result.receiptNumber,
+                merchantName = profile?.merchantName?.ifBlank { "AfricoPay POS" } ?: "AfricoPay POS",
+                merchantAddress = profile?.storeAddress,
+                merchantPhone = profile?.phone,
+                merchantId = merchantId,
+                terminalId = terminalId,
+                paymentMethod = method.name,
+                amount = amountCents,
+                currency = currency,
+                status = result.status.name,
+                dateTime = now,
+                footerText = profile?.receiptFooter,
+                isSimulated = true,
+                createdAt = now
+            )
+        )
     }
 
     fun retry(amountCents: Long, method: PaymentMethod, activity: android.app.Activity?) {

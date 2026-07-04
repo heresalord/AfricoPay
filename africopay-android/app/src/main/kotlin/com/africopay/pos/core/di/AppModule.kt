@@ -37,7 +37,11 @@ object AppModule {
             context,
             AfricoPayDatabase::class.java,
             AfricoPayDatabase.DATABASE_NAME
-        ).build()
+        )
+            // Pre-release app, no real merchant data to preserve yet — simplest safe path
+            // across schema changes until the first production release ships a real migration.
+            .fallbackToDestructiveMigration()
+            .build()
 
     @Provides fun provideTransactionDao(db: AfricoPayDatabase) = db.transactionDao()
     @Provides fun provideReceiptDao(db: AfricoPayDatabase) = db.receiptDao()
@@ -82,7 +86,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun providePrinterService(): PrinterService = MockPrinterService()
+    fun providePrinterService(
+        @ApplicationContext context: Context,
+        merchantProfileDao: com.africopay.pos.data.local.db.dao.MerchantProfileDao
+    ): PrinterService = com.africopay.pos.hal.android.BluetoothPrinterService(context, merchantProfileDao)
 
     // ─── Networking ───────────────────────────────────────────────────────────
 

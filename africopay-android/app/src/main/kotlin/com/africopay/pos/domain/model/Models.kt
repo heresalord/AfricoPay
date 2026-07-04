@@ -163,7 +163,10 @@ data class MerchantProfile(
     val simulationMode: Boolean = true,
     val terminalId: String = "",
     val appVersion: String = "0.1.0",
-    val dbVersion: Int = 1
+    val dbVersion: Int = 1,
+    val printerMacAddress: String? = null,
+    val printerName: String? = null,
+    val paperWidthMm: Int = 58
 )
 
 // ─── Simulation Config ────────────────────────────────────────────────────────
