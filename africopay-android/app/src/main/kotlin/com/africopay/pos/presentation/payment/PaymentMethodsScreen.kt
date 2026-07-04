@@ -18,7 +18,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.ViewModel
-import com.africopay.pos.BuildConfig
 import com.africopay.pos.core.util.HardwareCapabilitiesDetector
 import com.africopay.pos.domain.model.HardwareCapabilities
 import com.africopay.pos.domain.model.PaymentMethod
@@ -43,7 +42,6 @@ class PaymentMethodsViewModel @Inject constructor(
     /** Builds the method list from real device capabilities every time the screen is shown. */
     fun buildAvailableMethods(): List<PaymentMethodUi> {
         val hw: HardwareCapabilities = hardwareDetector.detect()
-        val simulationMode = BuildConfig.SIMULATION_MODE
 
         return listOfNotNull(
             // NFC: hidden entirely if the device has no NFC radio at all.
@@ -58,21 +56,22 @@ class PaymentMethodsViewModel @Inject constructor(
             } else null,
 
             // EMV / Mag stripe require a certified Smart POS reader (ZCS/Sunmi/PAX/...).
-            // None is integrated yet, so these only appear in simulation mode.
-            if (hw.hasEmv || simulationMode) {
+            // No manufacturer SDK is integrated yet, so these are hidden until one is —
+            // same rule as NFC, no simulated fallback.
+            if (hw.hasEmv) {
                 PaymentMethodUi(
                     method = PaymentMethod.EMV,
                     icon = Icons.Default.CreditCard,
-                    description = if (hw.hasEmv) "Insérez la carte à puce" else "Insérez la carte à puce (mode simulation)",
+                    description = "Insérez la carte à puce",
                     isAvailable = true
                 )
             } else null,
 
-            if (hw.hasMagStripe || simulationMode) {
+            if (hw.hasMagStripe) {
                 PaymentMethodUi(
                     method = PaymentMethod.MAG_STRIPE,
                     icon = Icons.Default.SwipeRight,
-                    description = if (hw.hasMagStripe) "Glissez la bande magnétique" else "Glissez la bande magnétique (mode simulation)",
+                    description = "Glissez la bande magnétique",
                     isAvailable = true
                 )
             } else null,

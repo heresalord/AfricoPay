@@ -1,7 +1,10 @@
 package com.africopay.pos.presentation.home
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,9 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -71,62 +75,87 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(AfricoDark, AfricoDark, Color(0xFF0E1720))
+                    )
+                )
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Amount Display
-            AmountDisplay(displayAmount = displayAmount, currency = "XOF")
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Numeric Keypad
-            NumericKeypad(
-                onDigit = ::appendDigit,
-                onDelete = ::deleteDigit,
-                onClear = { amountStr = "" }
+            // Soft ambient glow behind the amount card — a small touch that reads as "designed".
+            Box(
+                modifier = Modifier
+                    .padding(top = 40.dp)
+                    .size(280.dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(AfricoGreen.copy(alpha = 0.18f), Color.Transparent)
+                        )
+                    )
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Continue Button
-            val hasAmount = (amountStr.toLongOrNull() ?: 0L) > 0
-            Button(
-                onClick = ::onContinuePressed,
-                enabled = hasAmount,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AfricoGreen,
-                    contentColor = Color.Black,
-                    disabledContainerColor = AfricoDarkElevated,
-                    disabledContentColor = AfricoOnDarkMuted
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(28.dp))
+
+                AmountDisplay(displayAmount = displayAmount, currency = "XOF")
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                NumericKeypad(
+                    onDigit = ::appendDigit,
+                    onDelete = ::deleteDigit,
+                    onClear = { amountStr = "" }
                 )
-            ) {
-                Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(22.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("CONTINUER", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            }
 
-            // Cancel Button
-            TextButton(
-                onClick = { amountStr = "" },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .padding(top = 4.dp)
-            ) {
-                Text("ANNULER", color = AfricoError, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            }
+                Spacer(modifier = Modifier.weight(1f))
 
-            Spacer(modifier = Modifier.height(24.dp))
+                val hasAmount = (amountStr.toLongOrNull() ?: 0L) > 0
+
+                Button(
+                    onClick = ::onContinuePressed,
+                    enabled = hasAmount,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .then(
+                            if (hasAmount)
+                                Modifier.shadow(16.dp, RoundedCornerShape(18.dp), spotColor = AfricoGreen, ambientColor = AfricoGreen)
+                            else Modifier
+                        ),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AfricoGreen,
+                        contentColor = Color(0xFF002014),
+                        disabledContainerColor = AfricoDarkElevated,
+                        disabledContentColor = AfricoOnDarkMuted
+                    )
+                ) {
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("CONTINUER", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+
+                TextButton(
+                    onClick = { amountStr = "" },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .padding(top = 2.dp)
+                ) {
+                    Text("ANNULER", color = AfricoError, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
         }
     }
 }
@@ -141,20 +170,23 @@ private fun AfricoTopBar(
 ) {
     TopAppBar(
         title = {
-            Column {
-                Text(
-                    text = "AfricoPay",
-                    color = AfricoGreen,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "MODE SIMULATION",
-                    color = AfricoGold,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.5.sp
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "Africo", color = AfricoOnDark, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Pay", color = AfricoGreen, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = AfricoGold.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "SIMULATION",
+                        color = AfricoGold,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    )
+                }
             }
         },
         actions = {
@@ -168,52 +200,55 @@ private fun AfricoTopBar(
                 Icon(Icons.Default.Settings, contentDescription = "Paramètres", tint = AfricoOnDarkMuted)
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = AfricoDarkSurface
-        )
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
     )
 }
 
 @Composable
 private fun AmountDisplay(displayAmount: String, currency: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = AfricoDarkSurface)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, RoundedCornerShape(24.dp), ambientColor = Color.Black.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(24.dp),
+        color = AfricoDarkSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Montant à encaisser",
+                text = "MONTANT À ENCAISSER",
                 color = AfricoOnDarkMuted,
-                fontSize = 13.sp,
-                letterSpacing = 0.5.sp
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.5.sp
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             AnimatedContent(
                 targetState = displayAmount,
                 transitionSpec = {
-                    slideInVertically { -it } togetherWith slideOutVertically { it }
+                    (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut())
                 },
                 label = "amount_anim"
             ) { amount ->
                 Text(
                     text = amount,
                     color = AfricoOnDark,
-                    fontSize = if (amount.length > 10) 28.sp else 36.sp,
+                    fontSize = if (amount.length > 10) 30.sp else 40.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = currency,
                 color = AfricoGreen,
-                fontSize = 16.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 2.sp
+                letterSpacing = 3.sp
             )
         }
     }
@@ -232,11 +267,11 @@ private fun NumericKeypad(
         listOf("C", "0", "⌫")
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         keys.forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 row.forEach { key ->
                     KeypadButton(
@@ -245,7 +280,7 @@ private fun NumericKeypad(
                         onClick = {
                             when (key) {
                                 "⌫" -> onDelete()
-                                "C"  -> onClear()
+                                "C" -> onClear()
                                 else -> onDigit(key)
                             }
                         },
@@ -264,20 +299,29 @@ private fun KeypadButton(
     onClick: () -> Unit,
     isSpecial: Boolean = false
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.94f else 1f, label = "key_scale")
+
     Surface(
         modifier = modifier
-            .height(72.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+            .height(68.dp)
+            .scale(scale)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        shape = RoundedCornerShape(18.dp),
         color = if (isSpecial) AfricoDarkElevated else AfricoDarkSurface,
-        tonalElevation = 2.dp
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = label,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = if (isSpecial) AfricoOnDarkMuted else AfricoOnDark,
                 textAlign = TextAlign.Center
             )

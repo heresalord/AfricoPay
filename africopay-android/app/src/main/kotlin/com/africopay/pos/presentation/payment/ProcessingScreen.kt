@@ -34,10 +34,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 
-// ─── ViewModel ────────────────────────────────────────────────────────────────
+// ─── ViewModel ──────────────────────────────────────────────────────────────
+
+/** Any "present your card" wait fails the transaction after this long, like a real terminal. */
+private const val CARD_WAIT_TIMEOUT_MS = 60_000L
 
 sealed class ProcessingState {
     object Waiting : ProcessingState()
@@ -70,10 +74,20 @@ class ProcessingViewModel @Inject constructor(
     private suspend fun processNfc(amountCents: Long, activity: android.app.Activity) {
         _state.value = ProcessingState.WaitingForNfcTap
         try {
-            val event = nfcService.startListening(activity)
-                .first { it !is NfcEvent.Listening }
+            val event = withTimeoutOrNull(CARD_WAIT_TIMEOUT_MS) {
+                nfcService.startListening(activity).first { it !is NfcEvent.Listening }
+            }
 
             when (event) {
+                null -> _state.value = ProcessingState.Result(
+                    PaymentResult(
+                        status = TransactionStatus.TIMEOUT,
+                        transactionId = UUID.randomUUID().toString(),
+                        receiptNumber = "SIM-NFC-${System.currentTimeMillis()}",
+                        declineReason = "Aucune carte présentée après 60 secondes"
+                    ),
+                    PaymentMethod.NFC
+                )
                 is NfcEvent.CardDetected -> {
                     _state.value = ProcessingState.Processing
                     val result = nfcService.processCard(event.cardData)

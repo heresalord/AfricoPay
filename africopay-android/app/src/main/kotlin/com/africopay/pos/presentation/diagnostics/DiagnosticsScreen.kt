@@ -37,7 +37,6 @@ class DiagnosticsViewModel @Inject constructor(
 
     fun runDiagnostics(): Pair<HardwareCapabilities, List<DiagnosticItem>> {
         val hw = hardwareDetector.detect()
-        val sim = BuildConfig.SIMULATION_MODE
 
         val items = listOf(
             DiagnosticItem(
@@ -49,16 +48,16 @@ class DiagnosticsViewModel @Inject constructor(
                 }
             ),
             DiagnosticItem(
-                "Lecteur EMV", hw.hasEmv || sim, Icons.Default.CreditCard,
-                details = if (hw.hasEmv) null else "Non intégré — mode simulation"
+                "Lecteur EMV", hw.hasEmv, Icons.Default.CreditCard,
+                details = if (hw.hasEmv) null else "Aucun SDK fabricant intégré"
             ),
             DiagnosticItem(
-                "Bande Magnétique", hw.hasMagStripe || sim, Icons.Default.SwipeRight,
-                details = if (hw.hasMagStripe) null else "Non intégré — mode simulation"
+                "Bande Magnétique", hw.hasMagStripe, Icons.Default.SwipeRight,
+                details = if (hw.hasMagStripe) null else "Aucun SDK fabricant intégré"
             ),
             DiagnosticItem(
-                "Imprimante Thermique", hw.hasPrinter || sim, Icons.Default.Print,
-                details = if (hw.hasPrinter) "Papier OK" else "Non intégré — mode simulation"
+                "Imprimante Thermique", hw.hasPrinter, Icons.Default.Print,
+                details = if (hw.hasPrinter) "Papier OK" else "Aucun SDK fabricant intégré"
             ),
             DiagnosticItem("Caméra", hw.hasCamera, Icons.Default.PhotoCamera),
             DiagnosticItem("Scanner Code-barres", hw.hasScanner, Icons.Default.QrCodeScanner,

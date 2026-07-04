@@ -68,13 +68,17 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideEmvService(simulationConfig: SimulationConfig): EmvService =
-        MockEmvService(simulationConfig)
+    fun provideEmvService(
+        simulationConfig: SimulationConfig,
+        hardwareDetector: com.africopay.pos.core.util.HardwareCapabilitiesDetector
+    ): EmvService = MockEmvService(simulationConfig, hardwareDetector)
 
     @Provides
     @Singleton
-    fun provideMagStripeService(simulationConfig: SimulationConfig): MagStripeService =
-        MockMagStripeService(simulationConfig)
+    fun provideMagStripeService(
+        simulationConfig: SimulationConfig,
+        hardwareDetector: com.africopay.pos.core.util.HardwareCapabilitiesDetector
+    ): MagStripeService = MockMagStripeService(simulationConfig, hardwareDetector)
 
     @Provides
     @Singleton

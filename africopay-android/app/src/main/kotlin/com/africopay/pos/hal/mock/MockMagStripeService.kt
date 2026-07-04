@@ -1,5 +1,6 @@
 package com.africopay.pos.hal.mock
 
+import com.africopay.pos.core.util.HardwareCapabilitiesDetector
 import com.africopay.pos.domain.model.*
 import com.africopay.pos.hal.interfaces.MagStripeService
 import kotlinx.coroutines.delay
@@ -8,12 +9,16 @@ import kotlinx.coroutines.flow.flow
 import java.util.UUID
 import javax.inject.Inject
 
-/** Mock Magnetic Stripe Reader for simulation mode. */
+/**
+ * Magnetic stripe reader HAL. [isAvailable] reflects real detection — no manufacturer
+ * SDK is wired in yet, so this always reports unavailable until one is integrated.
+ */
 class MockMagStripeService @Inject constructor(
-    private val simulationConfig: SimulationConfig
+    private val simulationConfig: SimulationConfig,
+    private val hardwareDetector: HardwareCapabilitiesDetector
 ) : MagStripeService {
 
-    override fun isAvailable(): Boolean = true
+    override fun isAvailable(): Boolean = hardwareDetector.detect().hasMagStripe
 
     override fun startReading(): Flow<MagStripeEvent> = flow {
         emit(MagStripeEvent.WaitingForSwipe)
