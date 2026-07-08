@@ -1,74 +1,86 @@
 # AfricoPay Backend
 
-Backend API pour AfricoPay POS — Configuration distante, Feature Flags, Enregistrement des appareils, Gestion des marchands.
+Passerelle sécurisée entre l'application Android AfricoPay POS et l'API PayDunya.
 
-## Stack (à définir selon votre choix)
+## Stack
 
-Options disponibles :
-- **Supabase / PostgreSQL** (recommandé — compatible avec vos workflows SQL existants)
-- **Kotlin Ktor** (langage partagé avec l'application Android)
-- **Node.js TypeScript + Express/NestJS**
+- **Runtime** : Node.js v22+
+- **Langage** : TypeScript 5
+- **Framework** : Express 4
+- **HTTP Client** : Axios (appels PayDunya)
 
-## Structure Prévue
+## Structure
 
 ```
-africopay-backend/
-├── src/
-│   ├── routes/
-│   │   ├── devices.ts       # POST /devices/register
-│   │   ├── config.ts        # GET  /config
-│   │   ├── flags.ts         # GET  /flags
-│   │   ├── updates.ts       # GET  /updates/check
-│   │   └── transactions.ts  # POST /transactions/sync
-│   ├── middleware/
-│   │   ├── auth.ts
-│   │   └── rateLimiter.ts
-│   ├── models/
-│   └── utils/
-├── supabase/
-│   ├── migrations/
-│   └── functions/
-├── package.json
-├── tsconfig.json
-├── Dockerfile
-└── .env.example
+src/
+├── config/
+│   └── paydunya.ts         # Clés API & config sandbox/live
+├── services/
+│   ├── paydunyaService.ts  # Appels API PayDunya (PAR + PUSH)
+│   └── hashVerifier.ts     # Vérification hash IPN (SHA-512)
+├── routes/
+│   ├── payments.ts         # POST /v1/payments/initiate | GET /:token/status
+│   ├── disbursements.ts    # POST /v1/disbursements/send | GET /:id/status
+│   └── webhooks.ts         # POST /v1/webhooks/paydunya (IPN)
+├── middleware/
+│   └── auth.ts             # API Key (X-API-KEY)
+└── index.ts                # Entry point Express
 ```
 
-## API Endpoints
-
-Voir `/africopay-docs/api_spec.md` pour les contrats complets.
-
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/v1/devices/register` | Enregistrement terminal |
-| GET | `/v1/config` | Configuration marchands |
-| GET | `/v1/flags` | Feature flags |
-| GET | `/v1/updates/check` | Vérification MAJ |
-| POST | `/v1/transactions/sync` | Sync transactions |
-| POST | `/v1/diagnostics` | Rapport diagnostic |
-
-## Démarrage Rapide
+## Démarrage
 
 ```bash
-# Cloner et installer
+# 1. Cloner et installer
 npm install
 
-# Variables d'environnement
+# 2. Configurer les variables d'environnement
 cp .env.example .env
+# → Renseigner les clés PayDunya sandbox et CALLBACK_BASE_URL
 
-# Démarrer en développement
+# 3. Démarrer en développement (hot-reload)
 npm run dev
 
-# Build production
-npm run build && npm start
+# 4. (Optionnel) Exposer l'IPN avec ngrok
+npx ngrok http 3000
+# → Copier l'URL ngrok dans .env (CALLBACK_BASE_URL)
 ```
+
+## Endpoints
+
+| Méthode | Endpoint | Auth | Description |
+|---------|----------|------|-------------|
+| `GET` | `/health` | ❌ | Health check |
+| `POST` | `/v1/payments/initiate` | ✅ X-API-KEY | Créer une facture PayDunya |
+| `GET` | `/v1/payments/:token/status` | ✅ X-API-KEY | Statut d'un paiement |
+| `POST` | `/v1/disbursements/send` | ✅ X-API-KEY | Déboursement Mobile Money |
+| `GET` | `/v1/disbursements/:id/status` | ✅ X-API-KEY | Statut d'un déboursement |
+| `POST` | `/v1/webhooks/paydunya` | ❌ (hash SHA-512) | Notification IPN PayDunya |
+
+## Tests Rapides (Sandbox)
+
+```bash
+# Health check
+curl http://localhost:3000/health
+
+# Initier un paiement (5000 XOF)
+curl -X POST http://localhost:3000/v1/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: changeme_africopay_internal_key" \
+  -d '{"amount": 5000, "description": "Test AfricoPay POS"}'
+
+# Déboursement vers Wave Sénégal
+curl -X POST http://localhost:3000/v1/disbursements/send \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: changeme_africopay_internal_key" \
+  -d '{"accountAlias": "771234567", "amount": 2000, "withdrawMode": "wave-senegal"}'
+```
+
+## Opérateurs supportés (sandbox)
+
+Canaux de paiement PAR (prioritaires) : `card`, `wave-senegal`, `orange-money-senegal`, `mtn-benin`
+
+Modes de retrait PUSH disponibles : voir `src/routes/disbursements.ts → VALID_WITHDRAW_MODES`
 
 ## Variables d'Environnement
 
-```env
-DATABASE_URL=postgresql://...
-JWT_SECRET=...
-PORT=3000
-NODE_ENV=development
-AFRICOPAY_API_KEY=...
-```
+Voir [.env.example](.env.example) pour la liste complète.

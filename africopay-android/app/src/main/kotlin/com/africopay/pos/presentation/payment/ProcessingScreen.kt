@@ -1,6 +1,8 @@
 package com.africopay.pos.presentation.payment
 
 import android.graphics.Bitmap
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -22,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.africopay.pos.core.util.QrCodeGenerator
@@ -31,6 +34,8 @@ import com.africopay.pos.data.local.db.dao.ReceiptDao
 import com.africopay.pos.data.local.db.dao.TransactionDao
 import com.africopay.pos.data.local.db.entity.ReceiptEntity
 import com.africopay.pos.data.local.db.entity.TransactionEntity
+import com.africopay.pos.data.remote.api.AfricoPayApiService
+import com.africopay.pos.data.remote.dto.PaymentInitRequest
 import com.africopay.pos.domain.model.*
 import com.africopay.pos.hal.interfaces.NfcService
 import com.africopay.pos.presentation.home.formatXof
@@ -54,6 +59,7 @@ sealed class ProcessingState {
     object WaitingForNfcTap : ProcessingState()
     data class NfcError(val message: String) : ProcessingState()
     data class ShowingQr(val bitmap: Bitmap, val reference: String) : ProcessingState()
+    data class ShowingWebView(val url: String, val token: String) : ProcessingState()
     data class Result(val paymentResult: PaymentResult, val method: PaymentMethod) : ProcessingState()
 }
 
@@ -63,7 +69,8 @@ class ProcessingViewModel @Inject constructor(
     private val nfcService: NfcService,
     private val transactionDao: TransactionDao,
     private val receiptDao: ReceiptDao,
-    private val merchantProfileDao: MerchantProfileDao
+    private val merchantProfileDao: MerchantProfileDao,
+    private val apiService: AfricoPayApiService
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ProcessingState>(ProcessingState.Waiting)
@@ -74,6 +81,7 @@ class ProcessingViewModel @Inject constructor(
             when {
                 method == PaymentMethod.NFC && activity != null -> processNfc(amountCents, activity)
                 method == PaymentMethod.QR_CODE -> processQr(amountCents)
+                method == PaymentMethod.MOBILE_MONEY -> processMobileMoney(amountCents)
                 else -> processGeneric(amountCents, method)
             }
         }
@@ -135,6 +143,72 @@ class ProcessingViewModel @Inject constructor(
         )
         persist(amountCents, PaymentMethod.QR_CODE, result)
         _state.value = ProcessingState.Result(result, PaymentMethod.QR_CODE)
+    }
+
+    private suspend fun processMobileMoney(amountCents: Long) {
+        _state.value = ProcessingState.Processing
+        try {
+            val amountXof = amountCents / 100
+            val response = apiService.initiatePayment(
+                PaymentInitRequest(
+                    amount = amountXof,
+                    description = "Achat POS AfricoPay",
+                    storeName = "AfricoPay POS"
+                )
+            )
+            if (response.success) {
+                _state.value = ProcessingState.ShowingWebView(response.checkoutUrl, response.token)
+            } else {
+                _state.value = ProcessingState.NfcError("Impossible d'initier le paiement PayDunya")
+            }
+        } catch (e: Exception) {
+            _state.value = ProcessingState.NfcError("Erreur réseau: ${e.localizedMessage ?: "Inconnue"}")
+        }
+    }
+
+    fun checkPaydunyaStatus(amountCents: Long, token: String) {
+        viewModelScope.launch {
+            _state.value = ProcessingState.Processing
+            try {
+                val response = apiService.getPaymentStatus(token)
+                val status = when (response.status.lowercase()) {
+                    "completed" -> TransactionStatus.APPROVED
+                    "cancelled" -> TransactionStatus.CANCELLED
+                    "failed"    -> TransactionStatus.DECLINED
+                    else        -> TransactionStatus.TIMEOUT
+                }
+                
+                val result = PaymentResult(
+                    status = status,
+                    transactionId = response.token,
+                    receiptNumber = response.receiptUrl ?: "PD-${response.token}",
+                    declineReason = if (status != TransactionStatus.APPROVED) "Paiement PayDunya non complété (${response.status})" else null
+                )
+                persist(amountCents, PaymentMethod.MOBILE_MONEY, result)
+                _state.value = ProcessingState.Result(result, PaymentMethod.MOBILE_MONEY)
+            } catch (e: Exception) {
+                val result = PaymentResult(
+                    status = TransactionStatus.NETWORK_ERROR,
+                    transactionId = token,
+                    receiptNumber = "PD-$token",
+                    declineReason = "Erreur vérification statut : ${e.localizedMessage}"
+                )
+                persist(amountCents, PaymentMethod.MOBILE_MONEY, result)
+                _state.value = ProcessingState.Result(result, PaymentMethod.MOBILE_MONEY)
+            }
+        }
+    }
+
+    fun cancelPaydunyaFlow() {
+        _state.value = ProcessingState.Result(
+            PaymentResult(
+                status = TransactionStatus.CANCELLED,
+                transactionId = UUID.randomUUID().toString(),
+                receiptNumber = "PD-CANCEL-${System.currentTimeMillis()}",
+                declineReason = "Annulé par l'utilisateur"
+            ),
+            PaymentMethod.MOBILE_MONEY
+        )
     }
 
     private suspend fun processGeneric(amountCents: Long, method: PaymentMethod) {
@@ -263,6 +337,13 @@ fun ProcessingScreen(
                     bitmap = s.bitmap,
                     reference = s.reference,
                     amountCents = amountCents
+                )
+
+                is ProcessingState.ShowingWebView -> PaydunyaWebView(
+                    url = s.url,
+                    token = s.token,
+                    onSuccess = { viewModel.checkPaydunyaStatus(amountCents, s.token) },
+                    onCancel = { viewModel.cancelPaydunyaFlow() }
                 )
 
                 is ProcessingState.Result -> ResultView(
@@ -476,4 +557,83 @@ private fun statusLabel(status: TransactionStatus): String = when (status) {
     TransactionStatus.INSUFFICIENT_FUNDS -> "FONDS INSUFFISANTS"
     TransactionStatus.ISSUER_OFFLINE    -> "ÉMETTEUR HORS LIGNE"
     TransactionStatus.UNKNOWN_ERROR     -> "ERREUR INCONNUE"
+}
+
+@Composable
+private fun PaydunyaWebView(
+    url: String,
+    token: String,
+    onSuccess: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+    ) {
+        // En-tête avec bouton de retour/annulation manuel
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Portail PayDunya Sandbox",
+                color = AfricoOnDark,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(containerColor = AfricoError),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text("ANNULER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
+        }
+
+        // Vue WebView Android
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp)),
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    webViewClient = object : WebViewClient() {
+                        private fun checkUrl(targetUrl: String?): Boolean {
+                            if (targetUrl != null) {
+                                if (targetUrl.startsWith("https://africopay.com/payment/success")) {
+                                    onSuccess()
+                                    return true
+                                }
+                                if (targetUrl.startsWith("https://africopay.com/payment/cancel")) {
+                                    onCancel()
+                                    return true
+                                }
+                            }
+                            return false
+                        }
+
+                        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                            return checkUrl(url)
+                        }
+
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            if (!checkUrl(url)) {
+                                super.onPageStarted(view, url, favicon)
+                            }
+                        }
+                    }
+                    loadUrl(url)
+                }
+            }
+        )
+    }
 }

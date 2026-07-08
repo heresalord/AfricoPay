@@ -180,3 +180,80 @@ data class SimulationConfig(
     fun nextResult(amount: Long = 0): TransactionStatus =
         customOutcomes[amount] ?: defaultOutcome
 }
+
+// ─── PayDunya Integration ─────────────────────────────────────────────────────
+
+/** Statut d'une transaction PayDunya retourné par le backend AfricoPay */
+enum class PaydunyaTransactionStatus {
+    PENDING,
+    COMPLETED,
+    CANCELLED,
+    FAILED;
+
+    companion object {
+        fun fromString(value: String): PaydunyaTransactionStatus = when (value.lowercase()) {
+            "completed" -> COMPLETED
+            "cancelled" -> CANCELLED
+            "failed"    -> FAILED
+            else        -> PENDING
+        }
+    }
+}
+
+/** Résultat d'une initiation de paiement PayDunya */
+data class PaydunyaInvoice(
+    val token: String,
+    val checkoutUrl: String,
+    val totalAmount: Long,
+)
+
+/**
+ * Opérateurs Mobile Money pour le déboursement (API PUSH PayDunya).
+ * La valeur [apiValue] correspond exactement au withdraw_mode attendu par PayDunya.
+ */
+enum class WithdrawMode(val apiValue: String, val displayName: String) {
+    ORANGE_MONEY_SN("orange-money-senegal",  "Orange Money Sénégal"),
+    WAVE_SN(        "wave-senegal",           "Wave Sénégal"),
+    FREE_MONEY_SN(  "free-money-senegal",     "Free Money Sénégal"),
+    EXPRESSO_SN(    "expresso-sn",            "Expresso Sénégal"),
+    MTN_BENIN(      "mtn-benin",              "MTN Bénin"),
+    MOOV_BENIN(     "moov-benin",             "Moov Bénin"),
+    ORANGE_CI(      "orange-money-ci",        "Orange Money CI"),
+    WAVE_CI(        "wave-ci",                "Wave CI"),
+    MTN_CI(         "mtn-ci",                 "MTN CI"),
+    MOOV_CI(        "moov-ci",                "Moov CI"),
+    T_MONEY_TOGO(   "t-money-togo",           "T-Money Togo"),
+    MOOV_TOGO(      "moov-togo",              "Moov Togo"),
+    ORANGE_MALI(    "orange-money-mali",      "Orange Money Mali"),
+    ORANGE_BURKINA( "orange-money-burkina",   "Orange Money Burkina"),
+    MTN_CAMEROUN(   "mtn-cameroun",           "MTN Cameroun"),
+    DJAMO_CI(       "djamo-ci",               "Djamo CI"),
+    DJAMO_SN(       "djamo-sn",               "Djamo Sénégal"),
+    PAYDUNYA(       "paydunya",               "Compte PayDunya");
+
+    companion object {
+        fun fromApiValue(value: String): WithdrawMode? =
+            entries.find { it.apiValue == value }
+    }
+}
+
+/**
+ * Canaux de paiement disponibles pour l'API PAR PayDunya.
+ * Sous-ensemble prioritaire pour AfricoPay (plan approuvé).
+ */
+enum class PaydunyaPaymentChannel(val apiValue: String, val displayName: String) {
+    CARD(               "card",                  "Carte Bancaire"),
+    WAVE_SN(            "wave-senegal",           "Wave Sénégal"),
+    ORANGE_MONEY_SN(    "orange-money-senegal",   "Orange Money Sénégal"),
+    MTN_BENIN(          "mtn-benin",              "MTN Bénin");
+
+    companion object {
+        /** Canaux par défaut utilisés lors de l'initiation d'un paiement */
+        val defaults: List<String> = listOf(
+            CARD.apiValue,
+            WAVE_SN.apiValue,
+            ORANGE_MONEY_SN.apiValue,
+            MTN_BENIN.apiValue,
+        )
+    }
+}

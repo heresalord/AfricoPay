@@ -31,8 +31,10 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             isDebuggable = true
-            buildConfigField("String", "BASE_URL", "\"https://api-dev.africopay.com/v1/\"")
+            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"") // localhost via Android Emulator
             buildConfigField("Boolean", "SIMULATION_MODE", "true")
+            // Clé interne AfricoPay — doit correspondre à AFRICOPAY_API_KEY dans .env du backend
+            buildConfigField("String", "AFRICOPAY_API_KEY", "\"changeme_africopay_internal_key\"")
         }
         release {
             isMinifyEnabled = true
@@ -41,8 +43,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "BASE_URL", "\"https://api.africopay.com/v1/\"")
+            buildConfigField("String", "BASE_URL", "\"https://api.africopay.com/\"")
             buildConfigField("Boolean", "SIMULATION_MODE", "false")
+            // En production, remplacer par la vraie clé (via CI/CD ou local.properties)
+            buildConfigField("String", "AFRICOPAY_API_KEY", "\"REPLACE_WITH_PRODUCTION_KEY\"")
         }
     }
 

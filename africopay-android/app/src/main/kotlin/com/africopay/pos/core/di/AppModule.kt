@@ -3,7 +3,9 @@ package com.africopay.pos.core.di
 import android.content.Context
 import android.os.Build
 import androidx.room.Room
+import com.africopay.pos.BuildConfig
 import com.africopay.pos.data.local.db.AfricoPayDatabase
+import com.africopay.pos.data.remote.api.AfricoPayApiService
 import com.africopay.pos.domain.model.SimulationConfig
 import com.africopay.pos.hal.android.AndroidNfcService
 import com.africopay.pos.hal.interfaces.*
@@ -22,7 +24,6 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
-import com.africopay.pos.BuildConfig
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -114,6 +115,13 @@ object AppModule {
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
+            // Intercepteur API Key — ajoute X-API-KEY à chaque requête vers le backend AfricoPay
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .addHeader("X-API-KEY", BuildConfig.AFRICOPAY_API_KEY)
+                    .build()
+                chain.proceed(request)
+            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -128,4 +136,9 @@ object AppModule {
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
+
+    @Provides
+    @Singleton
+    fun provideAfricoPayApiService(retrofit: Retrofit): AfricoPayApiService =
+        retrofit.create(AfricoPayApiService::class.java)
 }

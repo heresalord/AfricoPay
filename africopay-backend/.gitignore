@@ -1,0 +1,20 @@
+# Environnement
+.env
+.env.local
+.env.production
+
+# Build
+dist/
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.DS_Store
+
+# TypeScript
+*.tsbuildinfo
